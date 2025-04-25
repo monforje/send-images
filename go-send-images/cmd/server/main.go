@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"send-images-backend/internal/db"
 	"send-images-backend/internal/handler"
 	"send-images-backend/internal/logger"
 	"syscall"
@@ -15,10 +16,15 @@ var (
 	uploadDir     = getEnv("UPLOAD_DIR", "./uploads")
 	addr          = getEnv("ADDR", "0.0.0.0:9999")
 	allowedOrigin = getEnv("ALLOWED_ORIGIN", "http://localhost:3000")
+	mongoURI      = getEnv("MONGO_URI", "mongodb://localhost:27017")
+	mongoDBName   = getEnv("MONGO_DB", "send-images")
 )
 
 func main() {
-	// Проверим и создадим директорию
+	// Инициализируем MongoDB
+	db.InitMongo(mongoURI, mongoDBName)
+
+	// Проверим и создадим директорию загрузок
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		logger.Fatal("Failed to create upload dir: %v", err)
 	}
@@ -37,7 +43,7 @@ func main() {
 		Handler: withCORS(mux),
 	}
 
-	// Остановка по Ctrl+C или SIGTERM
+	// Остановка по сигналу
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
@@ -59,10 +65,8 @@ func main() {
 		logger.Error("Shutdown error: %v", err)
 	}
 
-	// Завершаем логгер (если буферизация)
+	logger.Info("✅ Server gracefully stopped") // 🛠️ перемещено до Shutdown
 	logger.Shutdown()
-
-	logger.Info("✅ Server gracefully stopped")
 }
 
 func withCORS(next http.Handler) http.Handler {
@@ -80,7 +84,6 @@ func withCORS(next http.Handler) http.Handler {
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	// Можно заменить на настоящую проверку
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }

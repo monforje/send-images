@@ -14,19 +14,14 @@ const nextConfig = {
   reactStrictMode: true,
 
   experimental: {
-    // serverActions: true, // если ты пользуешься Server Actions
-  },
-
-  typescript: {
-    ignoreBuildErrors: false,
+    // serverActions: true, // если ты используешь Server Actions
   },
 
   eslint: {
-    // Чтобы билд не падал при ошибке ESLint (можно true → false на проде)
     ignoreDuringBuilds: true,
   },
 
-  // optional: basePath: '/your-subpath',
+  // Убираем productionSourceMaps, так как это больше не поддерживается
 };
 
 export default nextConfig;

@@ -17,6 +17,7 @@ export default function Modal({ selected, images, setSelected }: Props) {
   const [visible, setVisible] = useState(true);
   const currentIndex = images.findIndex((img) => img.filename === selected.filename);
 
+  // Функции для переключения изображений
   const showPrev = () => {
     const prevIndex = currentIndex === 0 ? images.length - 1 : currentIndex - 1;
     setSelected(images[prevIndex]);
@@ -27,11 +28,13 @@ export default function Modal({ selected, images, setSelected }: Props) {
     setSelected(images[nextIndex]);
   };
 
+  // Закрытие модального окна
   const closeModal = () => {
     setVisible(false);
     setTimeout(() => setSelected(null), 200); // должен совпадать с fadeOut
   };
 
+  // Обработка клавиш для управления модалкой
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeModal();
@@ -55,11 +58,12 @@ export default function Modal({ selected, images, setSelected }: Props) {
           alt={selected.filename}
           width={1200}
           height={800}
-          priority
+          priority // Устанавливаем priority для текущего изображения
           unoptimized
-          style={{ height: 'auto' }} // ✅ фикс
+          style={{ height: 'auto' }}
           className={styles.modalImage}
         />
+        
         <button className={styles.navLeft} onClick={(e) => { e.stopPropagation(); showPrev(); }}>
           <MdNavigateBefore size={28} />
         </button>

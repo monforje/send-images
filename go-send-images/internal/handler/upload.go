@@ -10,10 +10,13 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
+	"send-images-backend/internal/db"
 	"send-images-backend/internal/logger"
+	"send-images-backend/internal/model"
 	"send-images-backend/internal/util"
 )
 
@@ -29,7 +32,7 @@ var (
 	filenameSanitizer = regexp.MustCompile(`[^\w\-]`)
 	bufPool           = sync.Pool{
 		New: func() interface{} {
-			b := make([]byte, 32*1024) // 32KB
+			b := make([]byte, 32*1024)
 			return &b
 		},
 	}
@@ -49,7 +52,6 @@ func UploadHandler(uploadDir string) http.HandlerFunc {
 
 		logger.Debug("Received upload from %s", r.RemoteAddr)
 
-		// Ограничим размер тела
 		r.Body = http.MaxBytesReader(w, r.Body, 20*maxFileSize+1024)
 		if err := r.ParseMultipartForm(20 * maxFileSize); err != nil {
 			logger.Error("Malformed form or too large: %v", err)
@@ -81,7 +83,7 @@ func UploadHandler(uploadDir string) http.HandlerFunc {
 			go func(header *multipart.FileHeader) {
 				defer wg.Done()
 
-				entry, err := handleUpload(header, uploadDir)
+				entry, err := handleUpload(header, uploadDir, r)
 				if err != nil {
 					logger.Warn("Upload failed: %v", err)
 					return
@@ -112,7 +114,7 @@ func setupCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
 
-func handleUpload(header *multipart.FileHeader, uploadDir string) (map[string]string, error) {
+func handleUpload(header *multipart.FileHeader, uploadDir string, r *http.Request) (map[string]string, error) {
 	src, err := header.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open uploaded file: %w", err)
@@ -131,11 +133,25 @@ func handleUpload(header *multipart.FileHeader, uploadDir string) (map[string]st
 		return nil, fmt.Errorf("saving failed: %w", err)
 	}
 
+	url := "/uploads/" + filename
+	modified := time.Now().Unix()
+
+	image := model.Image{
+		Filename: filename,
+		URL:      url,
+		Modified: modified,
+	}
+
+	_, err = db.Collection("images").InsertOne(r.Context(), image)
+	if err != nil {
+		logger.Error("Failed to save image metadata to Mongo: %v", err)
+	}
+
 	logger.Info("Saved file: %s", dstPath)
 
 	return map[string]string{
 		"filename": filename,
-		"url":      "/uploads/" + filename,
+		"url":      url,
 	}, nil
 }
 

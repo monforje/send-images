@@ -17,7 +17,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "sourceMap": false // Отключаем карты кода
   },
   "include": [
     "next-env.d.ts",

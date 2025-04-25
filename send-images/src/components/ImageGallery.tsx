@@ -1,5 +1,3 @@
-'use client';
-
 import styles from '@/styles/home.module.css';
 import Image from 'next/image';
 import { MdClose } from 'react-icons/md';
@@ -42,6 +40,7 @@ export default function ImageGallery({ images, onSelect, onDelete }: Props) {
                 className={styles.thumb}
                 onClick={() => onSelect(img)}
                 unoptimized
+                // lazy loading будет по умолчанию включен
               />
               <button
                 className={styles.deleteBtn}
