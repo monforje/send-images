@@ -1,5 +1,6 @@
-import { getImages, type Image } from '@/lib/api';
+import Header from '@/components/Header';
 import ClientApp from '@/components/ClientApp';
+import { getImages, type Image } from '@/lib/api';
 
 export default async function Page() {
   let images: Image[] = [];
@@ -10,5 +11,10 @@ export default async function Page() {
     console.error('Ошибка при получении изображений:', error);
   }
 
-  return <ClientApp initialImages={images} />;
+  return (
+    <>
+      <Header />
+      <ClientApp initialImages={images} />
+    </>
+  );
 }
