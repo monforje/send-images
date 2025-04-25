@@ -1,0 +1,54 @@
+# Go build artifacts
+*.exe
+*.out
+*.test
+*.log
+*.tmp
+
+# Dependency directories
+vendor/
+
+# Go workspace files
+go.sum
+go.work
+go.work.sum
+
+# Uploads (runtime content)
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
+
+# IDE/Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Node.js (Next.js frontend)
+node_modules/
+.next/
+.env*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+
+# Lock files (optional)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# System files
+Thumbs.db
+desktop.ini

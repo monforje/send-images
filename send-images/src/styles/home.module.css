@@ -1,0 +1,146 @@
+/* send-images/src/styles/home.module.css */
+
+.wrapper {
+    display: flex;
+    height: 100vh;
+  }
+  
+  .left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .title {
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+    font-weight: 500;
+    text-align: center;
+  }
+  
+  .square {
+    width: 400px;
+    height: 200px;
+    border: 2px dashed #0066ff;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #cde6ff;
+    margin-bottom: 1rem;
+  }
+  
+  .saved {
+    color: green;
+    font-weight: 500;
+  }
+  
+  .sidebar {
+    width: 300px;
+    background-color: #ffffff;
+    border-left: 1px solid #ccc;
+    text-align: center;
+    padding: 1rem;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+    overflow-y: auto;
+  }
+  
+  .thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+  
+  .thumb {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.1s;
+  }
+  
+  .thumb:hover {
+    transform: scale(1.05);
+  }
+  
+  /* рядом с .thumb { … } */
+  
+  .thumbContainer {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .deleteBtn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    line-height: 18px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  
+  .deleteBtn:hover {
+    background: rgba(255, 0, 0, 0.8);
+  }
+  
+  
+  /* Маскируем оверлей на весь экран */
+  .modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  /* Контейнер под картинку, ограниченный 90% вьюпорта */
+  .modalContent {
+    position: relative;
+    max-width: 70vw;
+    max-height: 70vh;
+  }
+  
+  /* Картинка будет масштабироваться внутри контейнера */
+  .modalImage {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+  }
+  
+  /* Кнопка закрытия */
+  .modalClose {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #fff;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
