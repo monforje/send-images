@@ -39,7 +39,7 @@ const eslintConfig = [
       'react/jsx-key': 'error',
     },
   },
-
+  
   // Опционально: настройки для конфигов, если используешь *.config.ts
   {
     files: ['*.config.ts', '*.config.js', '*.mjs'],
