@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"sync"
 
 	"send-images-backend/internal/logger"
 	"send-images-backend/internal/util"
@@ -18,6 +19,8 @@ type Image struct {
 	Modified int64  `json:"modified"`
 }
 
+var imageExtPattern = regexp.MustCompile(`(?i)\.(jpe?g|png|gif|webp)$`)
+
 func ImagesHandler(uploadDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -26,7 +29,7 @@ func ImagesHandler(uploadDir string) http.HandlerFunc {
 		case http.MethodDelete:
 			deleteImage(w, r, uploadDir)
 		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			util.JSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		}
 	}
 }
@@ -37,60 +40,88 @@ func listImages(w http.ResponseWriter, r *http.Request, dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		logger.Error("Cannot read dir: %v", err)
-		http.Error(w, "Cannot read uploads dir", http.StatusInternalServerError)
+		util.JSONError(w, http.StatusInternalServerError, "Cannot read uploads directory")
 		return
 	}
 
-	var images []Image
-	re := regexp.MustCompile(`(?i)\.(jpe?g|png|gif|webp|bmp)$`)
+	const maxWorkers = 16
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		images []Image
+		sem    = make(chan struct{}, maxWorkers) // ограничим параллелизм
+	)
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || !imageExtPattern.MatchString(entry.Name()) {
 			continue
 		}
 
 		name := entry.Name()
-		if !re.MatchString(name) {
-			continue
-		}
-
 		fullPath := filepath.Join(dir, name)
-		info, err := os.Stat(fullPath)
-		if err != nil {
-			continue
-		}
 
-		images = append(images, Image{
-			Filename: name,
-			URL:      "/uploads/" + name,
-			Modified: info.ModTime().Unix(),
-		})
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(name, path string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			info, err := os.Stat(path)
+			if err != nil {
+				logger.Warn("Cannot stat file %s: %v", name, err)
+				return
+			}
+
+			img := Image{
+				Filename: name,
+				URL:      "/uploads/" + name,
+				Modified: info.ModTime().Unix(),
+			}
+
+			mu.Lock()
+			images = append(images, img)
+			mu.Unlock()
+		}(name, fullPath)
 	}
 
+	wg.Wait()
+
+	// Сортировка: новые выше
 	sort.Slice(images, func(i, j int) bool {
-		return images[i].Modified > images[j].Modified // sort by latest
+		return images[i].Modified > images[j].Modified
 	})
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	paginated := paginateImages(images, r)
+	util.JSON(w, http.StatusOK, map[string]interface{}{"images": paginated})
+}
 
-	if limit <= 0 {
-		limit = len(images)
+func paginateImages(images []Image, r *http.Request) []Image {
+	limit, err1 := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, err2 := strconv.Atoi(r.URL.Query().Get("offset"))
+
+	if err1 != nil || limit <= 0 {
+		limit = 50 // дефолт
 	}
-	if offset > len(images) {
-		offset = len(images)
+	if err2 != nil || offset < 0 {
+		offset = 0
 	}
+
+	if offset >= len(images) {
+		return []Image{}
+	}
+
 	end := offset + limit
 	if end > len(images) {
 		end = len(images)
 	}
-	util.JSON(w, http.StatusOK, map[string]interface{}{"images": images[offset:end]})
+	return images[offset:end]
 }
 
 func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
 	filename := r.URL.Query().Get("filename")
 	if filename == "" {
-		http.Error(w, "Missing filename parameter", http.StatusBadRequest)
+		util.JSONError(w, http.StatusBadRequest, "Missing 'filename' parameter")
 		return
 	}
 
@@ -102,15 +133,14 @@ func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		logger.Error("Failed to delete file: %v", err)
-		http.Error(w, "Cannot delete file", http.StatusInternalServerError)
+		logger.Error("Failed to delete %s: %v", fullPath, err)
+		util.JSONError(w, http.StatusInternalServerError, "Failed to delete file")
 		return
 	}
 
-	logger.Info("Deleted file: %s", fullPath)
-
+	logger.Info("Deleted file: %s", safeName)
 	util.JSON(w, http.StatusOK, map[string]string{
 		"message":  "File deleted",
-		"filename": filename,
+		"filename": safeName,
 	})
 }

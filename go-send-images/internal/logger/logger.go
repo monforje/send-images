@@ -2,15 +2,22 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
 	debugMode = strings.ToLower(os.Getenv("DEBUG")) == "true"
-	logger    = log.New(os.Stdout, "", 0)
+	logChan   = make(chan string, 1000) // буферизированный канал
+	stopOnce  sync.Once
+	wg        sync.WaitGroup
+
+	logOut = io.MultiWriter(os.Stdout) // Можно добавить os.OpenFile(...) для записи в файл
+	logger = log.New(logOut, "", 0)
 )
 
 const (
@@ -21,30 +28,63 @@ const (
 	blue   = "\033[34m"
 )
 
-func format(level, msg string, args ...interface{}) string {
+func init() {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for msg := range logChan {
+			logger.Println(msg)
+		}
+	}()
+}
+
+func Shutdown() {
+	stopOnce.Do(func() {
+		close(logChan)
+		wg.Wait()
+	})
+}
+
+func format(level, emoji, msg string, args ...interface{}) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	full := fmt.Sprintf(msg, args...)
-	return fmt.Sprintf("[%s] [%s] %s", timestamp, level, full)
+	return fmt.Sprintf("%s [%s] %s %s%s", timestamp, level, emoji, full, reset)
 }
 
 func Debug(msg string, args ...interface{}) {
 	if debugMode {
-		logger.Println(blue + format("DEBUG", msg, args...) + reset)
+		sendLog(blue + format("DEBUG", "🐛", msg, args...))
 	}
 }
 
 func Info(msg string, args ...interface{}) {
-	logger.Println(green + format("INFO", msg, args...) + reset)
+	sendLog(green + format("INFO", "ℹ️", msg, args...))
 }
 
 func Warn(msg string, args ...interface{}) {
-	logger.Println(yellow + format("WARN", msg, args...) + reset)
+	sendLog(yellow + format("WARN", "⚠️", msg, args...))
 }
 
 func Error(msg string, args ...interface{}) {
-	logger.Println(red + format("ERROR", msg, args...) + reset)
+	sendLog(red + format("ERROR", "❌", msg, args...))
 }
 
 func Fatal(msg string, args ...interface{}) {
-	logger.Fatalln(red + format("FATAL", msg, args...) + reset)
+	sendLog(red + format("FATAL", "💀", msg, args...))
+	time.Sleep(100 * time.Millisecond) // на случай async-канала
+	os.Exit(1)
+}
+
+func sendLog(msg string) {
+	select {
+	case logChan <- msg:
+	default:
+		// fallback при переполнении
+		logger.Println("[LOGGER] Log channel full, writing directly:")
+		logger.Println(msg)
+	}
+}
+
+func IsDebug() bool {
+	return debugMode
 }

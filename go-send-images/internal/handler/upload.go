@@ -3,108 +3,99 @@ package handler
 import (
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+
+	"github.com/google/uuid"
 
 	"send-images-backend/internal/logger"
 	"send-images-backend/internal/util"
-
-	"github.com/google/uuid"
 )
 
 const maxFileSize = 5 << 20 // 5MB
 
-var allowedTypes = map[string]bool{
-	"image/jpeg": true,
-	"image/png":  true,
-	"image/webp": true,
-	"image/gif":  true,
-}
+var (
+	allowedTypes = map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+		"image/gif":  true,
+	}
+	filenameSanitizer = regexp.MustCompile(`[^\w\-]`)
+	bufPool           = sync.Pool{
+		New: func() interface{} {
+			b := make([]byte, 32*1024) // 32KB
+			return &b
+		},
+	}
+)
 
 func UploadHandler(uploadDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// CORS для фронта
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
+		setupCORS(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			util.JSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
 			return
 		}
 
-		logger.Debug("Receiving upload request from %s", r.RemoteAddr)
+		logger.Debug("Received upload from %s", r.RemoteAddr)
 
-		// Ограничение размера тела запроса
-		r.Body = http.MaxBytesReader(w, r.Body, maxFileSize*20+512) // увеличено для нескольких файлов
-
-		if err := r.ParseMultipartForm(maxFileSize * 20); err != nil {
-			logger.Error("Request too large or malformed: %v", err)
-			http.Error(w, "Request too large", http.StatusBadRequest)
+		// Ограничим размер тела
+		r.Body = http.MaxBytesReader(w, r.Body, 20*maxFileSize+1024)
+		if err := r.ParseMultipartForm(20 * maxFileSize); err != nil {
+			logger.Error("Malformed form or too large: %v", err)
+			util.JSONError(w, http.StatusBadRequest, "Request too large or malformed")
 			return
 		}
 
-		form := r.MultipartForm
-		files := form.File["file"]
-
+		files := r.MultipartForm.File["file"]
 		if len(files) == 0 {
-			http.Error(w, "No files uploaded", http.StatusBadRequest)
+			util.JSONError(w, http.StatusBadRequest, "No files uploaded")
 			return
 		}
 
-		var uploadedFiles []map[string]string
-
-		for _, header := range files {
-			src, err := header.Open()
-			if err != nil {
-				logger.Error("Failed to open uploaded file: %v", err)
-				continue
-			}
-
-			if !isAllowedImage(src) {
-				logger.Warn("Skipping unsupported file type: %s", header.Filename)
-				src.Close()
-				continue
-			}
-
-			src.Seek(0, io.SeekStart)
-
-			filename := generateFilename(header.Filename)
-			dstPath := filepath.Join(uploadDir, filename)
-
-			if err := os.MkdirAll(uploadDir, 0755); err != nil {
-				logger.Error("Failed to create upload dir: %v", err)
-				src.Close()
-				http.Error(w, "Server error", http.StatusInternalServerError)
-				return
-			}
-
-			if err := saveFile(dstPath, src); err != nil {
-				logger.Error("Failed to save file: %v", err)
-				src.Close()
-				continue
-			}
-
-			src.Close()
-
-			logger.Info("Saved file: %s", dstPath)
-
-			uploadedFiles = append(uploadedFiles, map[string]string{
-				"filename": filename,
-				"url":      "/uploads/" + filename,
-			})
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			logger.Error("Upload dir creation failed: %v", err)
+			util.JSONError(w, http.StatusInternalServerError, "Internal server error")
+			return
 		}
+
+		var (
+			wg            sync.WaitGroup
+			mu            sync.Mutex
+			uploadedFiles = make([]map[string]string, 0, len(files))
+		)
+
+		for _, fh := range files {
+			fh := fh
+			wg.Add(1)
+			go func(header *multipart.FileHeader) {
+				defer wg.Done()
+
+				entry, err := handleUpload(header, uploadDir)
+				if err != nil {
+					logger.Warn("Upload failed: %v", err)
+					return
+				}
+				mu.Lock()
+				uploadedFiles = append(uploadedFiles, entry)
+				mu.Unlock()
+			}(fh)
+		}
+
+		wg.Wait()
 
 		if len(uploadedFiles) == 0 {
-			http.Error(w, "No valid images uploaded", http.StatusBadRequest)
+			util.JSONError(w, http.StatusBadRequest, "No valid images uploaded")
 			return
 		}
 
@@ -113,6 +104,39 @@ func UploadHandler(uploadDir string) http.HandlerFunc {
 			"files":   uploadedFiles,
 		})
 	}
+}
+
+func setupCORS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+func handleUpload(header *multipart.FileHeader, uploadDir string) (map[string]string, error) {
+	src, err := header.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open uploaded file: %w", err)
+	}
+	defer src.Close()
+
+	if !isAllowedImage(src) {
+		return nil, fmt.Errorf("unsupported file type: %s", header.Filename)
+	}
+	src.Seek(0, io.SeekStart)
+
+	filename := generateFilename(header.Filename)
+	dstPath := filepath.Join(uploadDir, filename)
+
+	if err := saveFile(dstPath, src); err != nil {
+		return nil, fmt.Errorf("saving failed: %w", err)
+	}
+
+	logger.Info("Saved file: %s", dstPath)
+
+	return map[string]string{
+		"filename": filename,
+		"url":      "/uploads/" + filename,
+	}, nil
 }
 
 func isAllowedImage(file io.ReadSeeker) bool {
@@ -126,16 +150,20 @@ func isAllowedImage(file io.ReadSeeker) bool {
 func generateFilename(original string) string {
 	ext := filepath.Ext(original)
 	base := strings.TrimSuffix(original, ext)
-	safe := regexp.MustCompile(`[^\w\-]`).ReplaceAllString(base, "_")
+	safe := filenameSanitizer.ReplaceAllString(base, "_")
 	return fmt.Sprintf("%s-%s%s", uuid.New().String(), safe, ext)
 }
 
-func saveFile(path string, src io.Reader) error {
-	dst, err := os.Create(path)
+func saveFile(dstPath string, src io.Reader) error {
+	dst, err := os.Create(dstPath)
 	if err != nil {
 		return err
 	}
 	defer dst.Close()
-	_, err = io.Copy(dst, src)
+
+	bufPtr := bufPool.Get().(*[]byte)
+	defer bufPool.Put(bufPtr)
+
+	_, err = io.CopyBuffer(dst, src, *bufPtr)
 	return err
 }
