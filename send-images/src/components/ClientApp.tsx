@@ -1,50 +1,68 @@
-// send-images/src/components/ClientApp.tsx
+'use client';
 
-'use client'; // Обозначаем, что компонент выполняется на клиенте (нужен доступ к useState, эффектам и т.д.)
+import { useEffect, useState, Suspense, lazy } from 'react';
+import Dropzone from './Dropzone';
+import ImageGallery from './ImageGallery';
+import styles from '@/styles/home.module.css';
 
-import { useState, Suspense, lazy } from 'react';
-import Dropzone from './Dropzone'; // Компонент для drag & drop загрузки
-import ImageGallery from './ImageGallery'; // Галерея изображений
-import styles from '@/styles/home.module.css'; // Стили
-
-// Ленивая загрузка модального окна — будет загружен только при необходимости
 const Modal = lazy(() => import('./Modal'));
 
-// Тип для изображения
 type Image = { filename: string; url: string };
 
-// Главный клиентский компонент, получает список изображений с сервера и управляет состоянием UI
 export default function ClientApp({ initialImages }: { initialImages: Image[] }) {
-  const [images, setImages] = useState(initialImages); // Список изображений
-  const [selected, setSelected] = useState<Image | null>(null); // Выбранное изображение для модалки
-  const [saved, setSaved] = useState(false); // Флаг, показывающий, что файл успешно загружен
+  const [images, setImages] = useState(initialImages);
+  const [selected, setSelected] = useState<Image | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Обработчик загрузки нового изображения
   const handleUpload = async (file: File) => {
+    setLoading(true);
+    setError('');
     const formData = new FormData();
-    formData.append('file', file); // Добавляем файл в тело запроса
-    
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (res.ok) {
-      const data = await res.json(); // Получаем имя и URL сохранённого файла
-      setImages((prev) => [...prev, { filename: data.filename, url: data.url }]); // Добавляем в список
-      setSaved(true); // Показываем сообщение "сохранено"
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Ошибка при загрузке');
+      }
+
+      const data = await res.json();
+      setImages((prev) => [...prev, { filename: data.filename, url: data.url }]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Обработчик удаления изображения
   const handleDelete = async (filename: string) => {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/images?filename=${encodeURIComponent(filename)}`,
-      { method: 'DELETE' }
-    );
-    if (res.status === 204) {
-      setImages((prev) => prev.filter((img) => img.filename !== filename)); // Удаляем из локального списка
-      if (selected?.filename === filename) setSelected(null); // Закрываем модалку, если выбрано удалённое изображение
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/images?filename=${encodeURIComponent(filename)}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Не удалось удалить');
+      }
+
+      setImages((prev) => prev.filter((img) => img.filename !== filename));
+      if (selected?.filename === filename) setSelected(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,17 +70,21 @@ export default function ClientApp({ initialImages }: { initialImages: Image[] })
     <div className={styles.wrapper}>
       <div className={styles.left}>
         <p className={styles.title}>Кинь картинку в прямоугольник!</p>
-        <Dropzone onUpload={handleUpload} /> {/* DnD загрузка */}
+        <Dropzone onUpload={handleUpload} />
         {saved && <p className={styles.saved}>Картинка сохранена ✅</p>}
+        {error && <p className={styles.error}>{error}</p>}
+        {/* Удалена строка загрузки */}
       </div>
 
-      {/* Отображаем превьюшки и кнопки удаления */}
       <ImageGallery images={images} onSelect={setSelected} onDelete={handleDelete} />
 
-      {/* Модальное окно — отображается только при выбранной картинке */}
       {selected && (
-        <Suspense fallback={null}> {/* Lazy loading через Suspense */}
-          <Modal selected={selected} onClose={() => setSelected(null)} />
+        <Suspense fallback={null}>
+          <Modal
+            selected={selected}
+            images={images}
+            setSelected={setSelected}
+          />
         </Suspense>
       )}
     </div>

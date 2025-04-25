@@ -1,32 +1,78 @@
-// send-images/src/components/Modal.tsx
+'use client';
 
-'use client'; // Компонент работает на клиенте (взаимодействие с событиями, DOM)
-
-// Импорт стилей модального окна
+import { useEffect, useState } from 'react';
 import styles from '@/styles/home.module.css';
 import Image from 'next/image';
+import { MdNavigateBefore, MdNavigateNext } from 'react-icons/md';
 
-// Пропсы модального окна: выбранное изображение и функция закрытия
+type ImageType = { filename: string; url: string };
+
 type Props = {
-  selected: { filename: string; url: string }; // Данные выбранной картинки
-  onClose: () => void; // Функция закрытия модалки
+  selected: ImageType;
+  images: ImageType[];
+  setSelected: (img: ImageType | null) => void;
 };
 
-// Компонент модального окна
-export default function Modal({ selected, onClose }: Props) {
+export default function Modal({ selected, images, setSelected }: Props) {
+  const [visible, setVisible] = useState(true);
+
+  const currentIndex = images.findIndex((img) => img.filename === selected.filename);
+
+  const showPrev = () => {
+    const prevIndex = currentIndex === 0 ? images.length - 1 : currentIndex - 1;
+    setSelected(images[prevIndex]);
+  };
+
+  const showNext = () => {
+    const nextIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
+    setSelected(images[nextIndex]);
+  };
+  const closeModal = () => {
+    setVisible(false);
+    setTimeout(() => {
+      setSelected(null);
+    }, 200); // должно совпадать с длительностью fadeOut
+  };
+  
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeModal();
+      if (e.key === 'ArrowLeft') showPrev();
+      if (e.key === 'ArrowRight') showNext();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [currentIndex]);
+
   return (
-    // Оверлей, закрывает модалку при клике вне контента
-    <div className={styles.modalOverlay} onClick={onClose}>
-      {/* Контейнер с изображением — клики по нему не закрывают окно */}
+    <div
+      className={`${styles.modalOverlay} ${!visible ? styles.modalFadeOut : ''}`}
+      onClick={closeModal}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <Image
-          src={process.env.NEXT_PUBLIC_API_URL + selected.url} // Полный путь до изображения с сервера
-          alt={selected.filename} // Alt для доступности
-          className={styles.modalImage} // Стили
-          loading="lazy" // Ленивая загрузка (для производительности)
+          src={process.env.NEXT_PUBLIC_API_URL + selected.url}
+          alt={selected.filename}
+          width={1200}
+          height={800}
+          className={styles.modalImage}
+          unoptimized
         />
-        {/* Кнопка закрытия модалки */}
-        <button className={styles.modalClose} onClick={onClose}>×</button>
+
+        <button className={styles.navLeft} onClick={(e) => { e.stopPropagation(); showPrev(); }}>
+          <MdNavigateBefore size={28} />
+        </button>
+
+        <button className={styles.navRight} onClick={(e) => { e.stopPropagation(); showNext(); }}>
+          <MdNavigateNext size={28} />
+        </button>
+
+        <div className={styles.modalCounter}>
+          {currentIndex + 1} / {images.length}
+        </div>
       </div>
     </div>
   );

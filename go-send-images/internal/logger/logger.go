@@ -1,38 +1,41 @@
 package logger
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 var (
-	debugMode bool
+	debugMode = strings.ToLower(os.Getenv("DEBUG")) == "true"
+	logger    = log.New(os.Stdout, "", 0)
 )
 
-// init determines whether debug mode is enabled by checking the DEBUG
-// environment variable. If set to "true", debug messages will be printed.
-func init() {
-	debugMode = strings.ToLower(os.Getenv("DEBUG")) == "true"
+func format(level, msg string, args ...interface{}) string {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	return fmt.Sprintf("[%s] [%s] %s", timestamp, level, fmt.Sprintf(msg, args...))
 }
-
-// Debug logs a debug message formatted with the provided arguments,
-// but only if debugMode is enabled. The message is prefixed with "[DEBUG]".
 
 func Debug(msg string, args ...interface{}) {
 	if debugMode {
-		log.Printf("[DEBUG] "+msg, args...)
+		logger.Println(format("DEBUG", msg, args...))
 	}
 }
 
-// Info logs an information message formatted with the provided arguments.
-// The message is prefixed with "[INFO]".
 func Info(msg string, args ...interface{}) {
-	log.Printf("[INFO] "+msg, args...)
+	logger.Println(format("INFO", msg, args...))
 }
 
-// Error logs an error message formatted with the provided arguments.
-// The message is prefixed
+func Warn(msg string, args ...interface{}) {
+	logger.Println(format("WARN", msg, args...))
+}
+
 func Error(msg string, args ...interface{}) {
-	log.Printf("[ERROR] "+msg, args...)
+	logger.Println(format("ERROR", msg, args...))
+}
+
+func Fatal(msg string, args ...interface{}) {
+	logger.Fatalln(format("FATAL", msg, args...))
 }

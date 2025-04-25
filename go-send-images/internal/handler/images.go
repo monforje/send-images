@@ -5,21 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 
 	"send-images-backend/internal/logger"
 	"send-images-backend/internal/util"
 )
 
-// ImagesHandler returns an HTTP handler for the /images endpoint. It supports two
-// methods: GET to list all images in the upload directory, and DELETE to delete an
-// image by filename. The upload directory is specified as an argument to the
-// function. The handler logs debug information about the requests it receives and
-// returns to the client.
 func ImagesHandler(uploadDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			listImages(w, uploadDir)
+			listImages(w, r, uploadDir)
 		case http.MethodDelete:
 			deleteImage(w, r, uploadDir)
 		default:
@@ -28,16 +25,12 @@ func ImagesHandler(uploadDir string) http.HandlerFunc {
 	}
 }
 
-// listImages writes a JSON response containing a list of image files in the specified directory.
-// It reads the directory contents, filters out non-image files, and constructs a list of maps
-// with each containing a filename and a URL. If the directory cannot be read, an error response
-// is sent to the client.
-
-func listImages(w http.ResponseWriter, dir string) {
+func listImages(w http.ResponseWriter, r *http.Request, dir string) {
 	logger.Debug("Listing images...")
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		logger.Error("Cannot read dir: %v", err)
 		http.Error(w, "Cannot read uploads dir", http.StatusInternalServerError)
 		return
 	}
@@ -57,12 +50,29 @@ func listImages(w http.ResponseWriter, dir string) {
 		})
 	}
 
-	util.JSON(w, http.StatusOK, map[string]interface{}{"images": images})
+	// сортировка по имени
+	sort.Slice(images, func(i, j int) bool {
+		return images[i]["filename"] < images[j]["filename"]
+	})
+
+	// пагинация
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 {
+		limit = len(images)
+	}
+	if offset > len(images) {
+		offset = len(images)
+	}
+	end := offset + limit
+	if end > len(images) {
+		end = len(images)
+	}
+	paged := images[offset:end]
+
+	util.JSON(w, http.StatusOK, map[string]interface{}{"images": paged})
 }
 
-// deleteImage deletes an image file from the specified directory based on the filename query parameter.
-// If the file does not exist, it returns a 404 status code. If the deletion fails, it returns a 500 status code.
-// Otherwise, it returns a 204 status code.
 func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
 	filename := r.URL.Query().Get("filename")
 	if filename == "" {
@@ -77,11 +87,15 @@ func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
 		if os.IsNotExist(err) {
 			http.Error(w, "File not found", http.StatusNotFound)
 		} else {
+			logger.Error("Failed to delete file: %v", err)
 			http.Error(w, "Cannot delete file", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	logger.Info("Deleted file: %s", fullPath)
-	w.WriteHeader(http.StatusNoContent)
+	util.JSON(w, http.StatusOK, map[string]string{
+		"message":  "File deleted",
+		"filename": filename,
+	})
 }

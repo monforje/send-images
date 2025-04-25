@@ -1,45 +1,55 @@
-// send-images/src/components/ImageGallery.tsx
+'use client';
 
-'use client'; // Компонент работает на клиенте (есть обработчики событий)
-
-// Импорт стилей из CSS-модуля
 import styles from '@/styles/home.module.css';
-// next/image используется для оптимизации изображений (ленивая загрузка, ресайз и т.д.)
 import Image from 'next/image';
+import { MdClose } from 'react-icons/md';
 
-// Пропсы: массив изображений + коллбэки на выбор и удаление
 type Props = {
-  images: { filename: string; url: string }[]; // Список картинок
-  onSelect: (img: { filename: string; url: string }) => void; // Клик по картинке
-  onDelete: (filename: string) => void; // Клик по кнопке удаления
+  images: { filename: string; url: string }[];
+  onSelect: (img: { filename: string; url: string }) => void;
+  onDelete: (filename: string) => void;
 };
 
-// Компонент галереи изображений
+const API = process.env.NEXT_PUBLIC_API_URL;
+
 export default function ImageGallery({ images, onSelect, onDelete }: Props) {
-  // Базовый адрес API — используется как префикс к путям картинок
-  const API = process.env.NEXT_PUBLIC_API_URL;
+  const handleDelete = (filename: string) => {
+    if (confirm(`Удалить ${filename}?`)) {
+      onDelete(filename);
+    }
+  };
+
+  if (images.length === 0) {
+    return (
+      <div className={styles.sidebar}>
+        <h2>Мои картинки</h2>
+        <p>Здесь пока пусто.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={styles.sidebar}> {/* Правая колонка со списком */}
+    <div className={styles.sidebar}>
       <h2>Мои картинки</h2>
-      <div className={styles.thumbs}> {/* Сетка превьюшек */}
+      <div className={styles.thumbs}>
         {images.map((img) => (
-          <div key={img.filename} className={styles.thumbContainer}> {/* Обёртка превью + кнопка удаления */}
+          <div key={img.filename} className={styles.thumbContainer}>
             <Image
-              src={API + img.url} // Полный путь до изображения
-              alt={img.filename} // Альтернативный текст
-              width={80} // Размеры превью
-              height={80}
-              className={styles.thumb} // Стилизация
-              unoptimized // Отключаем оптимизацию (т.к. изображения с внешнего сервера)
-              onClick={() => onSelect(img)} // Открыть в модалке
+              src={API + img.url}
+              alt={img.filename}
+              width={90}
+              height={90}
+              className={styles.thumb}
+              onClick={() => onSelect(img)}
+              unoptimized
             />
-            <button
-              className={styles.deleteBtn}
-              onClick={() => onDelete(img.filename)} // Удалить изображение
-            >
-              ×
-            </button>
+          <button
+            className={styles.deleteBtn}
+            onClick={() => handleDelete(img.filename)}
+            aria-label="Удалить"
+          >
+            <MdClose size={16} />
+          </button>
           </div>
         ))}
       </div>

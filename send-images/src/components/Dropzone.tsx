@@ -1,38 +1,71 @@
-// send-images/src/components/Dropzone.tsx
+'use client';
 
-'use client'; // Компонент работает на клиенте (используется drag'n'drop, взаимодействие с DOM)
-
-// Импорт стилей из CSS-модуля
+import { useRef, useState } from 'react';
 import styles from '@/styles/home.module.css';
 
-// Тип пропсов: при загрузке вызывается функция onUpload с выбранным файлом
 type Props = {
   onUpload: (file: File) => void;
 };
 
-// Компонент Dropzone — область, в которую можно перетаскивать изображение для загрузки
+const MAX_SIZE_MB = 5;
+
 export default function Dropzone({ onUpload }: Props) {
-  // Обработчик события drop
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = (files: FileList) => {
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        setError('Можно загружать только изображения.');
+        return;
+      }
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        setError(`Файл слишком большой. Макс ${MAX_SIZE_MB}MB.`);
+        return;
+      }
+      setError('');
+      onUpload(file);
+    });
+  };
+
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); // Отменяем стандартное поведение (иначе браузер может открыть файл)
-
-    // Получаем первый файл из DataTransfer
-    const file = e.dataTransfer.files?.[0];
-
-    // Проверяем, что это изображение
-    if (file && file.type.startsWith('image/')) {
-      onUpload(file); // Передаём файл в родительский компонент
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files) {
+      handleFiles(e.dataTransfer.files);
     }
   };
 
-  // Область с рамкой, принимает события drag-over и drop
+  const handleClick = () => inputRef.current?.click();
+
   return (
-    <div
-      className={styles.square}
-      onDragOver={(e) => e.preventDefault()} // Не даём браузеру блокировать drop
-      onDrop={handleDrop} // Обрабатываем drop
-    >
-      <span>Перетащи сюда</span>
-    </div>
+    <>
+      <div
+        className={`${styles.square} ${dragOver ? styles.dragOver : ''}`}
+        onClick={handleClick}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+      >
+        <span>Кликни или перетащи сюда</span>
+      </div>
+
+      <input
+        type="file"
+        multiple
+        accept="image/*"
+        ref={inputRef}
+        onChange={(e) => {
+          if (e.target.files) handleFiles(e.target.files);
+        }}
+        hidden
+      />
+
+      {error && <p className={styles.error}>{error}</p>}
+    </>
   );
 }
