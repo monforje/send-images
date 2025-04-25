@@ -1,40 +1,48 @@
 'use client';
 
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import Dropzone from './Dropzone';
 import ImageGallery from './ImageGallery';
 import styles from '@/styles/home.module.css';
+import { Image } from '@/lib/api';
 
 const Modal = lazy(() => import('./Modal'));
 
-type Image = { filename: string; url: string };
-
 export default function ClientApp({ initialImages }: { initialImages: Image[] }) {
-  const [images, setImages] = useState(initialImages);
+  const [images, setImages] = useState<Image[]>(initialImages);
   const [selected, setSelected] = useState<Image | null>(null);
   const [saved, setSaved] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (files: File[]) => {
     setLoading(true);
     setError('');
+  
     const formData = new FormData();
-    formData.append('file', file);
-
+    for (const file of files) {
+      formData.append('file', file); // каждое добавляем!
+    }
+  
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
-
+  
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Ошибка при загрузке');
       }
-
+  
       const data = await res.json();
-      setImages((prev) => [...prev, { filename: data.filename, url: data.url }]);
+      const newImages = (data.files ?? []).map((f: { filename: string; url: string }) => ({
+        filename: f.filename,
+        url: f.url,
+      }));
+  
+      setImages((prev) => [...prev, ...newImages]);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
@@ -43,7 +51,7 @@ export default function ClientApp({ initialImages }: { initialImages: Image[] })
       setLoading(false);
     }
   };
-
+  
   const handleDelete = async (filename: string) => {
     setLoading(true);
     setError('');
@@ -52,12 +60,15 @@ export default function ClientApp({ initialImages }: { initialImages: Image[] })
         `${process.env.NEXT_PUBLIC_API_URL}/images?filename=${encodeURIComponent(filename)}`,
         { method: 'DELETE' }
       );
+
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Не удалось удалить');
       }
 
       setImages((prev) => prev.filter((img) => img.filename !== filename));
+      setDeleted(true);
+      setTimeout(() => setDeleted(false), 3000);
       if (selected?.filename === filename) setSelected(null);
     } catch (err: any) {
       setError(err.message);
@@ -67,24 +78,27 @@ export default function ClientApp({ initialImages }: { initialImages: Image[] })
   };
 
   return (
-    <div className={styles.wrapper}>
-      <div className={styles.left}>
-        <p className={styles.title}>Кинь картинку в прямоугольник!</p>
+    <div className={styles.wrapperColumn}>
+      <div className={styles.topBlock}>
         <Dropzone onUpload={handleUpload} />
-        {saved && <p className={styles.saved}>Картинка сохранена ✅</p>}
+        {saved && (
+          <div className={styles.toast}>
+            <span>Картинка сохранена ✅</span>
+          </div>
+        )}
+        {deleted && (
+          <div className={`${styles.toast} ${styles.toastDanger}`}>
+            <span>Картинка удалена 🗑️</span>
+          </div>
+        )}
         {error && <p className={styles.error}>{error}</p>}
-        {/* Удалена строка загрузки */}
       </div>
 
       <ImageGallery images={images} onSelect={setSelected} onDelete={handleDelete} />
 
       {selected && (
         <Suspense fallback={null}>
-          <Modal
-            selected={selected}
-            images={images}
-            setSelected={setSelected}
-          />
+          <Modal selected={selected} images={images} setSelected={setSelected} />
         </Suspense>
       )}
     </div>

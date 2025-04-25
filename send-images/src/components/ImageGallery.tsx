@@ -4,9 +4,14 @@ import styles from '@/styles/home.module.css';
 import Image from 'next/image';
 import { MdClose } from 'react-icons/md';
 
+type ImageType = {
+  filename: string;
+  url: string;
+};
+
 type Props = {
-  images: { filename: string; url: string }[];
-  onSelect: (img: { filename: string; url: string }) => void;
+  images: ImageType[];
+  onSelect: (img: ImageType) => void;
   onDelete: (filename: string) => void;
 };
 
@@ -19,40 +24,36 @@ export default function ImageGallery({ images, onSelect, onDelete }: Props) {
     }
   };
 
-  if (images.length === 0) {
-    return (
-      <div className={styles.sidebar}>
-        <h2>Мои картинки</h2>
-        <p>Здесь пока пусто.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.sidebar}>
-      <h2>Мои картинки</h2>
-      <div className={styles.thumbs}>
-        {images.map((img) => (
-          <div key={img.filename} className={styles.thumbContainer}>
-            <Image
-              src={API + img.url}
-              alt={img.filename}
-              width={90}
-              height={90}
-              className={styles.thumb}
-              onClick={() => onSelect(img)}
-              unoptimized
-            />
-          <button
-            className={styles.deleteBtn}
-            onClick={() => handleDelete(img.filename)}
-            aria-label="Удалить"
-          >
-            <MdClose size={16} />
-          </button>
-          </div>
-        ))}
-      </div>
+    <div className={styles.galleryWrapper}>
+      <h2 className={styles.galleryTitle}>Мои картинки</h2>
+
+      {images.length === 0 ? (
+        <p className={styles.empty}>Здесь пока пусто 😢</p>
+      ) : (
+        <div className={styles.thumbs}>
+          {images.map((img) => (
+            <div key={img.filename} className={styles.thumbWrapper}>
+              <Image
+                src={API + img.url}
+                alt={img.filename}
+                width={100}
+                height={100}
+                className={styles.thumb}
+                onClick={() => onSelect(img)}
+                unoptimized
+              />
+              <button
+                className={styles.deleteBtn}
+                onClick={() => handleDelete(img.filename)}
+                aria-label="Удалить"
+              >
+                <MdClose size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

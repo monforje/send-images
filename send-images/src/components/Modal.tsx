@@ -15,7 +15,6 @@ type Props = {
 
 export default function Modal({ selected, images, setSelected }: Props) {
   const [visible, setVisible] = useState(true);
-
   const currentIndex = images.findIndex((img) => img.filename === selected.filename);
 
   const showPrev = () => {
@@ -27,13 +26,11 @@ export default function Modal({ selected, images, setSelected }: Props) {
     const nextIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1;
     setSelected(images[nextIndex]);
   };
+
   const closeModal = () => {
     setVisible(false);
-    setTimeout(() => {
-      setSelected(null);
-    }, 200); // должно совпадать с длительностью fadeOut
+    setTimeout(() => setSelected(null), 200); // должен совпадать с fadeOut
   };
-  
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -58,10 +55,11 @@ export default function Modal({ selected, images, setSelected }: Props) {
           alt={selected.filename}
           width={1200}
           height={800}
-          className={styles.modalImage}
+          priority
           unoptimized
+          style={{ height: 'auto' }} // ✅ фикс
+          className={styles.modalImage}
         />
-
         <button className={styles.navLeft} onClick={(e) => { e.stopPropagation(); showPrev(); }}>
           <MdNavigateBefore size={28} />
         </button>

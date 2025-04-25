@@ -13,29 +13,38 @@ var (
 	logger    = log.New(os.Stdout, "", 0)
 )
 
+const (
+	reset  = "\033[0m"
+	red    = "\033[31m"
+	yellow = "\033[33m"
+	green  = "\033[32m"
+	blue   = "\033[34m"
+)
+
 func format(level, msg string, args ...interface{}) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	return fmt.Sprintf("[%s] [%s] %s", timestamp, level, fmt.Sprintf(msg, args...))
+	full := fmt.Sprintf(msg, args...)
+	return fmt.Sprintf("[%s] [%s] %s", timestamp, level, full)
 }
 
 func Debug(msg string, args ...interface{}) {
 	if debugMode {
-		logger.Println(format("DEBUG", msg, args...))
+		logger.Println(blue + format("DEBUG", msg, args...) + reset)
 	}
 }
 
 func Info(msg string, args ...interface{}) {
-	logger.Println(format("INFO", msg, args...))
+	logger.Println(green + format("INFO", msg, args...) + reset)
 }
 
 func Warn(msg string, args ...interface{}) {
-	logger.Println(format("WARN", msg, args...))
+	logger.Println(yellow + format("WARN", msg, args...) + reset)
 }
 
 func Error(msg string, args ...interface{}) {
-	logger.Println(format("ERROR", msg, args...))
+	logger.Println(red + format("ERROR", msg, args...) + reset)
 }
 
 func Fatal(msg string, args ...interface{}) {
-	logger.Fatalln(format("FATAL", msg, args...))
+	logger.Fatalln(red + format("FATAL", msg, args...) + reset)
 }

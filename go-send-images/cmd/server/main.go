@@ -33,9 +33,8 @@ func main() {
 		Handler: withCORS(mux),
 	}
 
-	// Graceful shutdown
 	go func() {
-		logger.Info("Server running at %s", addr)
+		logger.Info("Server listening on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server error: %v", err)
 			os.Exit(1)
@@ -47,6 +46,7 @@ func main() {
 	<-stop
 
 	logger.Info("Shutting down server...")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -60,10 +60,12 @@ func withCORS(h http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
 		h.ServeHTTP(w, r)
 	})
 }

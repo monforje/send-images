@@ -2,48 +2,59 @@
 
 import { useRef, useState } from 'react';
 import styles from '@/styles/home.module.css';
+import { FiUploadCloud } from 'react-icons/fi';
 
 type Props = {
-  onUpload: (file: File) => void;
+  onUpload: (files: File[]) => void;
+  maxSizeMb?: number;
+  accept?: string;
+  multiple?: boolean;
 };
 
-const MAX_SIZE_MB = 5;
+const defaultMaxSize = 5;
 
-export default function Dropzone({ onUpload }: Props) {
+export default function Dropzone({
+  onUpload,
+  maxSizeMb = defaultMaxSize,
+  accept = 'image/*',
+  multiple = true,
+}: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList) => {
-    Array.from(files).forEach((file) => {
+    const validFiles: File[] = [];
+
+    for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) {
         setError('Можно загружать только изображения.');
         return;
       }
-      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        setError(`Файл слишком большой. Макс ${MAX_SIZE_MB}MB.`);
+      if (file.size > maxSizeMb * 1024 * 1024) {
+        setError(`Файл слишком большой. Макс ${maxSizeMb}MB.`);
         return;
       }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length) {
       setError('');
-      onUpload(file);
-    });
+      onUpload(validFiles);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    if (e.dataTransfer.files) {
-      handleFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
   };
-
-  const handleClick = () => inputRef.current?.click();
 
   return (
     <>
       <div
         className={`${styles.square} ${dragOver ? styles.dragOver : ''}`}
-        onClick={handleClick}
+        onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -51,14 +62,15 @@ export default function Dropzone({ onUpload }: Props) {
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
-        <span>Кликни или перетащи сюда</span>
+        <FiUploadCloud size={60} color="#42a5f5" />
+        <span className={styles.squareLabel}>Кликни или перетащи файлы</span>
       </div>
 
       <input
         type="file"
-        multiple
-        accept="image/*"
         ref={inputRef}
+        accept={accept}
+        multiple={multiple}
         onChange={(e) => {
           if (e.target.files) handleFiles(e.target.files);
         }}

@@ -12,6 +12,12 @@ import (
 	"send-images-backend/internal/util"
 )
 
+type Image struct {
+	Filename string `json:"filename"`
+	URL      string `json:"url"`
+	Modified int64  `json:"modified"`
+}
+
 func ImagesHandler(uploadDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -35,29 +41,39 @@ func listImages(w http.ResponseWriter, r *http.Request, dir string) {
 		return
 	}
 
-	var images []map[string]string
-	for _, e := range entries {
-		if e.IsDir() {
+	var images []Image
+	re := regexp.MustCompile(`(?i)\.(jpe?g|png|gif|webp|bmp)$`)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
 			continue
 		}
-		name := e.Name()
-		if ok, _ := regexp.MatchString(`(?i)\.(jpe?g|png|gif|webp|bmp)$`, name); !ok {
+
+		name := entry.Name()
+		if !re.MatchString(name) {
 			continue
 		}
-		images = append(images, map[string]string{
-			"filename": name,
-			"url":      "/uploads/" + name,
+
+		fullPath := filepath.Join(dir, name)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			continue
+		}
+
+		images = append(images, Image{
+			Filename: name,
+			URL:      "/uploads/" + name,
+			Modified: info.ModTime().Unix(),
 		})
 	}
 
-	// сортировка по имени
 	sort.Slice(images, func(i, j int) bool {
-		return images[i]["filename"] < images[j]["filename"]
+		return images[i].Modified > images[j].Modified // sort by latest
 	})
 
-	// пагинация
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+
 	if limit <= 0 {
 		limit = len(images)
 	}
@@ -68,9 +84,7 @@ func listImages(w http.ResponseWriter, r *http.Request, dir string) {
 	if end > len(images) {
 		end = len(images)
 	}
-	paged := images[offset:end]
-
-	util.JSON(w, http.StatusOK, map[string]interface{}{"images": paged})
+	util.JSON(w, http.StatusOK, map[string]interface{}{"images": images[offset:end]})
 }
 
 func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
@@ -85,15 +99,16 @@ func deleteImage(w http.ResponseWriter, r *http.Request, dir string) {
 
 	if err := os.Remove(fullPath); err != nil {
 		if os.IsNotExist(err) {
-			http.Error(w, "File not found", http.StatusNotFound)
-		} else {
-			logger.Error("Failed to delete file: %v", err)
-			http.Error(w, "Cannot delete file", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
+		logger.Error("Failed to delete file: %v", err)
+		http.Error(w, "Cannot delete file", http.StatusInternalServerError)
 		return
 	}
 
 	logger.Info("Deleted file: %s", fullPath)
+
 	util.JSON(w, http.StatusOK, map[string]string{
 		"message":  "File deleted",
 		"filename": filename,
