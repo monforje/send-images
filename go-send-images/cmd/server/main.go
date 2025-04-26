@@ -30,6 +30,9 @@ func main() {
 	}
 	logger.Info("Upload dir ready at %s", uploadDir)
 
+	// Запускаем задачу по очистке устаревших изображений
+	go handler.StartCleanupTask(uploadDir)
+
 	// Роуты
 	mux := http.NewServeMux()
 	mux.HandleFunc("/images", handler.ImagesHandler(uploadDir))

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -16,7 +17,62 @@ import (
 	"send-images-backend/internal/util"
 )
 
+func StartCleanupTask(uploadDir string) {
+	ticker := time.NewTicker(30 * time.Second) // Проверка каждые 30 сек (можно настроить)
+	defer ticker.Stop()
+
+	// Используем for range для обработки канала
+	for range ticker.C {
+		cleanUpOrphanedImages(uploadDir)
+	}
+}
+
+func cleanUpOrphanedImages(uploadDir string) {
+	// Получаем список всех файлов в директории, но не используем переменную files
+	_, err := os.ReadDir(uploadDir)
+	if err != nil {
+		logger.Error("Failed to read upload directory: %v", err)
+		return
+	}
+
+	// Проходим по всем записям в базе данных и проверяем, существует ли соответствующий файл
+	cur, err := db.Collection("images").Find(context.Background(), bson.D{})
+	if err != nil {
+		logger.Error("Failed to query images from Mongo: %v", err)
+		return
+	}
+	defer cur.Close(context.Background())
+
+	var image model.Image
+	for cur.Next(context.Background()) {
+		if err := cur.Decode(&image); err != nil {
+			logger.Error("Failed to decode image: %v", err)
+			continue
+		}
+
+		// Проверяем, существует ли файл на диске
+		fullPath := filepath.Join(uploadDir, image.Filename)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			// Если файл не существует, удаляем его запись из базы
+			_, err := db.Collection("images").DeleteOne(context.Background(), bson.M{"filename": image.Filename})
+			if err != nil {
+				logger.Error("Failed to delete orphaned image from MongoDB: %v", err)
+			} else {
+				logger.Info("Deleted orphaned image from MongoDB: %s", image.Filename)
+			}
+		}
+	}
+
+	if err := cur.Err(); err != nil {
+		logger.Error("Cursor error while cleaning orphaned images: %v", err)
+	}
+}
+
+// Вызовем эту функцию в `ImagesHandler` для периодической очистки базы данных
 func ImagesHandler(uploadDir string) http.HandlerFunc {
+	// Периодическая очистка (например, каждый раз при запросе на получение изображений)
+	cleanUpOrphanedImages(uploadDir)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

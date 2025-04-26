@@ -103,6 +103,7 @@
   padding-bottom: 0.5rem;
 }
 
+/* Сетка превью */
 .thumbs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -272,7 +273,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(6px);
   transition: all 0.2s ease-in-out;
 }
 

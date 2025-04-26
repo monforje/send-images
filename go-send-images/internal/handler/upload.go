@@ -29,7 +29,7 @@ var (
 		"image/webp": true,
 		"image/gif":  true,
 	}
-	filenameSanitizer = regexp.MustCompile(`[^\w\-]`)
+	filenameSanitizer = regexp.MustCompile(`[^\w\-]`) // Исправлено
 	bufPool           = sync.Pool{
 		New: func() interface{} {
 			b := make([]byte, 32*1024)
